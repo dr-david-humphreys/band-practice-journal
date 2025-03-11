@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h3>Student Practice Records</h3>
+                <div class="row mt-3">
+                    <div class="col-md-4">
+                        <select class="form-select" id="weekFilter">
+                            <!-- Week options will be populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Student</th>
+                                <th>Instrument</th>
+                                <th>Total Minutes</th>
+                                <th>Days Practiced</th>
+                                <th>Parent Signed</th>
+                                <th>Final Grade</th>
+                                <th>Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="studentRecords">
+                            <!-- Student records will be populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for detailed view -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Practice Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Day</th>
+                                <th>Minutes</th>
+                            </tr>
+                        </thead>
+                        <tbody id="detailsBody">
+                            <!-- Details will be populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h3>Student Practice Logs</h3>
+            </div>
+            <div class="card-body">
+                <div class="accordion" id="studentAccordion">
+                    <!-- Practice records will be loaded here dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<template id="studentTemplate">
+    <div class="accordion-item student-section mb-4">
+        <h2 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse">
+                <div class="d-flex justify-content-between align-items-center w-100">
+                    <div>
+                        <span class="student-name fw-bold"></span>
+                        <span class="badge bg-secondary ms-2 instrument-badge"></span>
+                    </div>
+                    <div>
+                        <span class="badge bg-success streak-badge"></span>
+                    </div>
+                </div>
+            </button>
+        </h2>
+        <div class="accordion-collapse collapse show">
+            <div class="accordion-body">
+                <div class="practice-records">
+                    <!-- Individual practice records will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<template id="practiceRecordTemplate">
+    <div class="practice-record card mb-4">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Week of <span class="week-start"></span></h5>
+                <div>
+                    <button class="btn btn-primary sign-record" data-record-id="">
+                        Sign Practice Log
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive mb-3">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Day</th>
+                            <th>Minutes</th>
+                            <th>Comments</th>
+                        </tr>
+                    </thead>
+                    <tbody class="practice-days">
+                        <!-- Days will be populated dynamically -->
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-info">
+                            <td><strong>Total Minutes</strong></td>
+                            <td class="total-minutes"></td>
+                            <td></td>
+                        </tr>
+                        <tr class="table-info">
+                            <td><strong>Days Practiced</strong></td>
+                            <td class="days-practiced"></td>
+                            <td></td>
+                        </tr>
+                        <tr class="table-success">
+                            <td><strong>Current Grade</strong></td>
+                            <td class="current-grade"></td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            <div class="weekly-goals mb-3">
+                <h6>Weekly Goals Progress</h6>
+                <div class="list-group goals-list">
+                    <!-- Goals will be populated dynamically -->
+                </div>
+            </div>
+
+            <div class="additional-comments">
+                <h6>Additional Comments</h6>
+                <p class="comments-text text-muted"></p>
+            </div>
+        </div>
+    </div>
+</template>
+{% endblock %}

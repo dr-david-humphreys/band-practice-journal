@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .header {
+            background-color: #5a1418;
+            color: #f8af42;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px;
+        }
+        .content {
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 5px;
+            text-decoration: none;
+            color: white;
+            font-weight: bold;
+        }
+        .approve {
+            background-color: #28a745;
+        }
+        .deny {
+            background-color: #dc3545;
+        }
+        .practice-details {
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Mattei Middle School Band</h1>
+        <h2>Practice Verification Request</h2>
+    </div>
+    
+    <div class="content">
+        <p>Dear Parent,</p>
+        
+        <p>{{ student_name }} has submitted their band practice record for the week of {{ week_start }} and is requesting your verification.</p>
+        
+        <div class="practice-details">
+            <h3>Practice Summary:</h3>
+            <p><strong>Total Minutes Practiced:</strong> {{ total_minutes }} minutes</p>
+            <p><strong>Number of Practice Days:</strong> {{ practice_days }} days</p>
+        </div>
+
+        <p>Please verify these practice minutes by clicking one of the buttons below:</p>
+        
+        <div style="text-align: center;">
+            <a href="{{ approve_url }}" class="button approve">✓ Approve Practice Record</a>
+            <a href="{{ deny_url }}" class="button deny">✗ Deny Practice Record</a>
+        </div>
+        
+        <p style="margin-top: 20px; font-size: 0.9em; color: #666;">
+            Note: This verification contributes 20 points to your student's grade. 
+            Please verify only if you can confirm these practice minutes are accurate.
+        </p>
+    </div>
+</body>
+</html>

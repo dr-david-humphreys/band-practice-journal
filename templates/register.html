@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h3>Register</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('register') }}">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Your Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="parent_email" class="form-label">Parent's Email</label>
+                        <input type="email" class="form-control" id="parent_email" name="parent_email" required>
+                        <div class="form-text">This email will be used to verify your practice records.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="instrument" class="form-label">Instrument</label>
+                        <select class="form-select" id="instrument" name="instrument" required>
+                            <option value="">Select your instrument</option>
+                            <option value="Flute">Flute</option>
+                            <option value="Clarinet">Clarinet</option>
+                            <option value="Bass Clarinet">Bass Clarinet</option>
+                            <option value="Alto Saxophone">Alto Saxophone</option>
+                            <option value="Tenor Saxophone">Tenor Saxophone</option>
+                            <option value="Trumpet">Trumpet</option>
+                            <option value="Horn">Horn</option>
+                            <option value="Trombone">Trombone</option>
+                            <option value="Euphonium">Euphonium</option>
+                            <option value="Tuba">Tuba</option>
+                            <option value="Percussion">Percussion</option>
+                            <option value="Oboe">Oboe</option>
+                            <option value="Bassoon">Bassoon</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Register</button>
+                </form>
+                <div class="mt-3">
+                    <p>Already have an account? <a href="{{ url_for('login') }}">Login here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="alert alert-info">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h4 class="mb-0">Week of {{ today.strftime('%B %d, %Y') }}</h4>
+                    <small>Current Practice Streak: <span class="badge bg-success" id="streakCount">{{ current_user.streak_count }} days</span></small>
+                </div>
+                <div>
+                    <h5 class="mb-0">Your Instrument: {{ current_user.instrument }}</h5>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>Weekly Practice Log</h3>
+                <p class="text-muted mb-0">
+                    Points System:
+                    <ul class="mb-0">
+                        <li>100+ minutes: 80 points</li>
+                        <li>90-99 minutes: 75 points</li>
+                        <li>80-89 minutes: 70 points</li>
+                        <li>70-79 minutes: 65 points</li>
+                        <li>60-69 minutes: 60 points</li>
+                        <li>50-59 minutes: 55 points</li>
+                        <li>40-49 minutes: 50 points</li>
+                        <li>30-39 minutes: 45 points</li>
+                        <li>20-29 minutes: 40 points</li>
+                        <li>0-19 minutes: 35 points</li>
+                        <li>Parent signature: +20 points</li>
+                        <li>5+ practice days: +5 bonus points</li>
+                    </ul>
+                </p>
+            </div>
+            <div class="card-body">
+                <form id="practiceForm">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Day</th>
+                                    <th>Minutes Practiced</th>
+                                    <th>Daily Comments</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
+                                <tr>
+                                    <td>{{ day }}</td>
+                                    <td>
+                                        <input type="number" class="form-control practice-input" 
+                                               data-day="{{ day.lower() }}" min="0" value="0" required>
+                                    </td>
+                                    <td>
+                                        <input type="text" class="form-control comment-input"
+                                               data-day="{{ day.lower() }}" placeholder="What did you practice?">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                <tr class="table-info">
+                                    <td><strong>Total Minutes</strong></td>
+                                    <td colspan="2"><span id="totalMinutes">0</span></td>
+                                </tr>
+                                <tr class="table-info">
+                                    <td><strong>Days Practiced</strong></td>
+                                    <td colspan="2"><span id="daysPracticed">0</span></td>
+                                </tr>
+                                <tr class="table-success">
+                                    <td><strong>Estimated Grade</strong></td>
+                                    <td colspan="2"><span id="estimatedGrade">-</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="form-group mt-3">
+                        <label for="weeklyComments">Weekly Comments</label>
+                        <textarea class="form-control" id="weeklyComments" rows="3" 
+                                  placeholder="Any additional notes about your practice this week?"></textarea>
+                    </div>
+
+                    <div class="text-center mt-3">
+                        <button type="submit" class="btn btn-primary">Save Practice Log</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h3>Practice History</h3>
+            </div>
+            <div class="card-body">
+                <div id="practiceHistory">
+                    {% if practice_records %}
+                    <div class="list-group">
+                        {% for record in practice_records %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">Week of {{ record.week_start.strftime('%B %d, %Y') }}</h6>
+                                    <p class="mb-1">
+                                        Total Minutes: {{ record.minutes|sum_minutes }} |
+                                        Days Practiced: {{ record.minutes|count_practice_days }}
+                                    </p>
+                                    {% if record.comments %}
+                                    <small class="text-muted">Weekly Comments: {{ record.comments }}</small>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end">
+                                    {% if record.parent_signature_status == 'approved' %}
+                                    <span class="badge bg-success">Parent Approved</span>
+                                    {% elif record.parent_signature_status == 'denied' %}
+                                    <span class="badge bg-danger">Parent Denied</span>
+                                    {% elif record.signature_requested %}
+                                    <span class="badge bg-warning">Signature Pending</span>
+                                    {% else %}
+                                    <a href="{{ url_for('request_signature', record_id=record.id) }}" 
+                                       class="btn btn-secondary btn-sm">Request Parent Signature</a>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="mt-2">
+                                <button class="btn btn-sm btn-info" type="button" 
+                                        data-bs-toggle="collapse" 
+                                        data-bs-target="#details{{ record.id }}">
+                                    View Details
+                                </button>
+                                <div class="collapse mt-2" id="details{{ record.id }}">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Day</th>
+                                                    <th>Minutes</th>
+                                                    <th>Comments</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {% set daily_minutes = record.minutes|from_json %}
+                                                {% set daily_comments = record.daily_comments|from_json %}
+                                                {% for day in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] %}
+                                                <tr>
+                                                    <td>{{ day|title }}</td>
+                                                    <td>{{ daily_minutes.get(day, 0) }}</td>
+                                                    <td>{{ daily_comments.get(day, '') }}</td>
+                                                </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No practice records found.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Parent Email Modal -->
+<div class="modal fade" id="parentEmailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update Parent Email</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Please enter your parent's email address to request practice verification:</p>
+                <form id="parentEmailForm">
+                    <div class="mb-3">
+                        <label for="parentEmail" class="form-label">Parent's Email</label>
+                        <input type="email" class="form-control" id="parentEmail" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
