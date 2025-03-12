@@ -287,4 +287,115 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    // Initialize sorting state
+    let currentSort = {
+        column: null,
+        direction: 'asc'
+    };
+
+    // Handle sorting for tables with sortable headers
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.addEventListener('click', function() {
+            const column = this.dataset.sort;
+            const table = this.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+            
+            // Update sort direction
+            if (currentSort.column === column) {
+                currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+                currentSort.column = column;
+                currentSort.direction = 'asc';
+            }
+            
+            // Update sort icons
+            document.querySelectorAll('.sortable i').forEach(icon => {
+                icon.className = 'fas fa-sort';
+            });
+            this.querySelector('i').className = `fas fa-sort-${currentSort.direction === 'asc' ? 'up' : 'down'}`;
+            
+            // Sort rows
+            rows.sort((a, b) => {
+                let aValue, bValue;
+                
+                // Get values based on column
+                if (column === 'student') {
+                    // Extract name without numbers for primary sort
+                    const aMatch = a.cells[0].textContent.trim().match(/([a-zA-Z]+)(\d+)?/);
+                    const bMatch = b.cells[0].textContent.trim().match(/([a-zA-Z]+)(\d+)?/);
+                    
+                    if (aMatch && bMatch) {
+                        const [, aName, aNum] = aMatch;
+                        const [, bName, bNum] = bMatch;
+                        
+                        // First compare names
+                        if (aName !== bName) {
+                            return aName.localeCompare(bName) * (currentSort.direction === 'asc' ? 1 : -1);
+                        }
+                        // If names are same, compare numbers
+                        return ((parseInt(aNum) || 0) - (parseInt(bNum) || 0)) * (currentSort.direction === 'asc' ? 1 : -1);
+                    }
+                    return a.cells[0].textContent.localeCompare(b.cells[0].textContent) * (currentSort.direction === 'asc' ? 1 : -1);
+                } else if (column === 'instrument') {
+                    aValue = parseInt(a.cells[1].dataset.scoreOrder) || 999;
+                    bValue = parseInt(b.cells[1].dataset.scoreOrder) || 999;
+                } else if (column === 'minutes') {
+                    aValue = parseInt(a.cells[2].textContent) || 0;
+                    bValue = parseInt(b.cells[2].textContent) || 0;
+                } else if (column === 'days') {
+                    aValue = parseInt(a.cells[3].textContent) || 0;
+                    bValue = parseInt(b.cells[3].textContent) || 0;
+                } else if (column === 'signature') {
+                    aValue = a.cells[4].querySelector('.badge').textContent.includes('Yes') ? 1 : 0;
+                    bValue = b.cells[4].querySelector('.badge').textContent.includes('Yes') ? 1 : 0;
+                } else if (column === 'grade') {
+                    // Extract just the number from "X/105 pts" format
+                    aValue = parseInt(a.cells[5].textContent.split('/')[0]) || 0;
+                    bValue = parseInt(b.cells[5].textContent.split('/')[0]) || 0;
+                }
+                
+                // Handle numeric sorting
+                if (typeof aValue === 'number' && typeof bValue === 'number') {
+                    return (aValue - bValue) * (currentSort.direction === 'asc' ? 1 : -1);
+                }
+                
+                // Handle string sorting
+                return String(aValue).localeCompare(String(bValue)) * (currentSort.direction === 'asc' ? 1 : -1);
+            });
+            
+            // Re-append sorted rows
+            rows.forEach(row => tbody.appendChild(row));
+        });
+    });
+
+    // Handle practice details view
+    document.querySelectorAll('.view-details').forEach(button => {
+        button.addEventListener('click', function() {
+            const minutes = JSON.parse(this.dataset.minutes || '{}');
+            const comments = JSON.parse(this.dataset.comments || '{}');
+            const student = this.dataset.student;
+            const days = ['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+            
+            document.querySelector('.modal-title').textContent = `${student}'s Practice Details`;
+            
+            const tbody = document.getElementById('detailsBody');
+            tbody.innerHTML = '';
+            
+            days.forEach(day => {
+                const row = document.createElement('tr');
+                const dayMinutes = minutes[day] || 0;
+                row.innerHTML = `
+                    <td>${day.charAt(0).toUpperCase() + day.slice(1)}</td>
+                    <td>${dayMinutes} minutes</td>
+                    <td>${comments[day] || '-'}</td>
+                `;
+                if (dayMinutes > 0) {
+                    row.classList.add('table-success');
+                }
+                tbody.appendChild(row);
+            });
+        });
+    });
 });

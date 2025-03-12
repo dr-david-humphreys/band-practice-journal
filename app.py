@@ -1,10 +1,10 @@
 from datetime import datetime, date, timedelta
+import json
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_mail import Mail, Message
-import json
 import secrets
 import os
 import string
@@ -149,9 +149,54 @@ def calculate_grade_filter(record):
         return '-'
     points = calculate_points(record)
     if record.parent_signature_status == 'approved':
-        return f'{points}/105'
+        return f"{points}/105 pts"
     else:
         return f'{points-20}/105 (+20 with parent signature)'
+
+@app.template_filter('calculate_points')
+def calculate_points_filter(record):
+    return calculate_points(record)
+
+def calculate_points(record):
+    if not record:
+        return 0
+    
+    try:
+        minutes_dict = json.loads(record.minutes) if isinstance(record.minutes, str) else record.minutes
+        total_minutes = sum(int(mins) for mins in minutes_dict.values())
+        practice_days = sum(1 for mins in minutes_dict.values() if int(mins) > 0)
+        
+        # Calculate base points based on total minutes
+        if total_minutes >= 100:
+            base_points = 80
+        elif total_minutes >= 90:
+            base_points = 75
+        elif total_minutes >= 80:
+            base_points = 70
+        elif total_minutes >= 70:
+            base_points = 65
+        elif total_minutes >= 60:
+            base_points = 60
+        elif total_minutes >= 50:
+            base_points = 55
+        elif total_minutes >= 40:
+            base_points = 50
+        elif total_minutes >= 30:
+            base_points = 45
+        elif total_minutes >= 20:
+            base_points = 40
+        else:
+            base_points = 35
+        
+        # Add bonus points for 5+ practice days
+        bonus_points = 5 if practice_days >= 5 else 0
+        
+        # Add points for parent signature
+        signature_points = 20 if record.parent_signature_status == 'approved' else 0
+        
+        return base_points + bonus_points + signature_points
+    except (json.JSONDecodeError, AttributeError, ValueError):
+        return 0
 
 @app.route('/')
 def index():
@@ -378,29 +423,6 @@ def get_week_records(week_start):
         'total_points': calculate_points(record)
     } for record in records])
 
-def calculate_points(record):
-    minutes_dict = json.loads(record.minutes)
-    total_minutes = sum(int(v) for v in minutes_dict.values())
-    practice_days = sum(1 for v in minutes_dict.values() if int(v) > 0)
-    
-    # Base points based on total minutes
-    base_points = 35  # Minimum points
-    if total_minutes >= 100: base_points = 80
-    elif total_minutes >= 90: base_points = 75
-    elif total_minutes >= 80: base_points = 70
-    elif total_minutes >= 70: base_points = 65
-    elif total_minutes >= 60: base_points = 60
-    elif total_minutes >= 50: base_points = 55
-    elif total_minutes >= 40: base_points = 50
-    elif total_minutes >= 30: base_points = 45
-    elif total_minutes >= 20: base_points = 40
-    
-    # Add bonus points
-    bonus_points = 5 if practice_days >= 5 else 0
-    signature_points = 20 if record.parent_signature_status == 'approved' else 0
-    
-    return base_points + bonus_points + signature_points
-
 @app.route('/student/dashboard')
 @login_required
 def student_dashboard():
@@ -431,8 +453,18 @@ def student_dashboard():
 @login_required
 def director_dashboard():
     if current_user.role != 'director':
+        flash('Access denied. Director privileges required.', 'danger')
         return redirect(url_for('index'))
-    return render_template('director_dashboard.html')
+    
+    # Define instruments in score order
+    instruments = [
+        'Flute', 'Oboe', 'Clarinet', 'Bassoon', 'Saxophone',
+        'Trumpet', 'Horn', 'Trombone', 'Euphonium', 'Tuba'
+    ]
+    
+    # Get all practice records
+    records = PracticeRecord.query.all()
+    return render_template('director_dashboard.html', records=records, instruments=instruments)
 
 @app.route('/request_signature/<int:record_id>')
 @login_required
@@ -496,31 +528,4 @@ def update_parent_email():
     return jsonify({'message': 'Parent email updated successfully'})
 
 if __name__ == '__main__':
-    with app.app_context():
-        db.drop_all()  # Drop all existing tables
-        db.create_all()  # Create new tables with updated schema
-        
-        # Create director account if it doesn't exist
-        if not User.query.filter_by(username='director').first():
-            director = User(
-                username='director',
-                email='director@school.edu',
-                password_hash=generate_password_hash('director123'),
-                role='director'
-            )
-            db.session.add(director)
-            
-        # Create test student account
-        if not User.query.filter_by(username='student').first():
-            student = User(
-                username='student',
-                email='student@school.edu',
-                password_hash=generate_password_hash('student123'),
-                role='student',
-                instrument='Trumpet',
-                parent_email='parent@email.com'
-            )
-            db.session.add(student)
-            
-        db.session.commit()
     app.run(debug=True)
