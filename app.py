@@ -52,6 +52,8 @@ class PracticeRecord(db.Model):
     signature_token = db.Column(db.String(100), nullable=True)  # Token for email verification
     signature_requested = db.Column(db.Boolean, default=False)
     signature_timestamp = db.Column(db.DateTime, nullable=True)
+    is_submitted = db.Column(db.Boolean, default=False)  # Track if week is submitted
+    submitted_at = db.Column(db.DateTime, nullable=True)  # When the week was submitted
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=True)
 
@@ -123,6 +125,34 @@ def count_practice_days_filter(minutes_dict):
     except (json.JSONDecodeError, AttributeError):
         return 0
 
+@app.template_filter('get_day_minutes')
+def get_day_minutes(minutes_dict, day, default=0):
+    try:
+        if isinstance(minutes_dict, str):
+            minutes_dict = json.loads(minutes_dict)
+        return int(minutes_dict.get(day, default))
+    except (json.JSONDecodeError, AttributeError, ValueError):
+        return default
+
+@app.template_filter('get_day_comment')
+def get_day_comment(comments_dict, day, default=''):
+    try:
+        if isinstance(comments_dict, str):
+            comments_dict = json.loads(comments_dict)
+        return comments_dict.get(day, default)
+    except (json.JSONDecodeError, AttributeError):
+        return default
+
+@app.template_filter('calculate_grade')
+def calculate_grade_filter(record):
+    if not record:
+        return '-'
+    points = calculate_points(record)
+    if record.parent_signature_status == 'approved':
+        return f'{points}/105'
+    else:
+        return f'{points-20}/105 (+20 with parent signature)'
+
 @app.route('/')
 def index():
     if current_user.is_authenticated:
@@ -190,20 +220,21 @@ def logout():
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
 
-@app.route('/api/practice', methods=['POST'])
+@app.route('/api/practice/daily', methods=['POST'])
 @login_required
-def save_practice():
+def save_daily_practice():
     if current_user.role != 'student':
         return jsonify({'error': 'Unauthorized'}), 403
     
     data = request.json
-    minutes = data.get('minutes', {})
-    daily_comments = data.get('comments', {})
-    weekly_comments = data.get('weeklyComments', '')
+    day = data.get('day')
+    minutes = data.get('minutes', 0)
+    comment = data.get('comment', '')
     
     # Get or create practice record for current week
     today = datetime.now().date()
-    week_start = today - timedelta(days=today.weekday())
+    days_since_friday = (today.weekday() - 4) % 7  # Friday is weekday 4
+    week_start = today - timedelta(days=days_since_friday)
     
     record = PracticeRecord.query.filter_by(
         student_id=current_user.id,
@@ -214,22 +245,27 @@ def save_practice():
         record = PracticeRecord(
             student_id=current_user.id,
             week_start=week_start,
-            minutes=json.dumps(minutes),
-            comments=weekly_comments,
-            daily_comments=json.dumps(daily_comments),
+            minutes=json.dumps({day: minutes}),
+            daily_comments=json.dumps({day: comment}),
             parent_signature_status='pending',
             signature_requested=False,
             created_at=datetime.utcnow()
         )
         db.session.add(record)
     else:
-        record.minutes = json.dumps(minutes)
-        record.comments = weekly_comments
-        record.daily_comments = json.dumps(daily_comments)
+        # Update existing record
+        minutes_dict = json.loads(record.minutes) if record.minutes else {}
+        comments_dict = json.loads(record.daily_comments) if record.daily_comments else {}
+        
+        minutes_dict[day] = minutes
+        comments_dict[day] = comment
+        
+        record.minutes = json.dumps(minutes_dict)
+        record.daily_comments = json.dumps(comments_dict)
         record.updated_at = datetime.utcnow()
     
-    # Update streak
-    if any(int(mins) > 0 for mins in minutes.values()):
+    # Update streak if minutes > 0
+    if int(minutes) > 0:
         if current_user.last_practice:
             days_diff = (today - current_user.last_practice).days
             if days_diff == 1:  # Consecutive days
@@ -243,14 +279,51 @@ def save_practice():
     try:
         db.session.commit()
         return jsonify({
-            'message': 'Practice record saved',
+            'message': 'Daily practice saved',
             'streak': current_user.streak_count,
             'parent_email': current_user.parent_email
         })
     except Exception as e:
         db.session.rollback()
-        app.logger.error(f'Error saving practice record: {str(e)}')
-        return jsonify({'error': 'Failed to save practice record'}), 500
+        app.logger.error(f'Error saving daily practice: {str(e)}')
+        return jsonify({'error': 'Failed to save practice'}), 500
+
+@app.route('/api/practice/submit', methods=['POST'])
+@login_required
+def submit_weekly_practice():
+    if current_user.role != 'student':
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    data = request.json
+    weekly_comments = data.get('weeklyComments', '')
+    
+    # Get current week's record
+    today = datetime.now().date()
+    days_since_friday = (today.weekday() - 4) % 7  # Friday is weekday 4
+    week_start = today - timedelta(days=days_since_friday)
+    
+    record = PracticeRecord.query.filter_by(
+        student_id=current_user.id,
+        week_start=week_start
+    ).first()
+    
+    if not record:
+        return jsonify({'error': 'No practice recorded this week'}), 400
+    
+    record.comments = weekly_comments
+    record.is_submitted = True
+    record.submitted_at = datetime.utcnow()
+    
+    try:
+        db.session.commit()
+        return jsonify({
+            'message': 'Weekly practice submitted',
+            'parent_email': current_user.parent_email
+        })
+    except Exception as e:
+        db.session.rollback()
+        app.logger.error(f'Error submitting practice: {str(e)}')
+        return jsonify({'error': 'Failed to submit practice'}), 500
 
 @app.route('/api/practice/history')
 @login_required
@@ -336,14 +409,22 @@ def student_dashboard():
     
     # Get current week's practice record
     today = datetime.now().date()
-    week_start = today - timedelta(days=today.weekday())
+    days_since_friday = (today.weekday() - 4) % 7  # Friday is weekday 4
+    week_start = today - timedelta(days=days_since_friday)
     
+    current_week_record = PracticeRecord.query.filter_by(
+        student_id=current_user.id,
+        week_start=week_start
+    ).first()
+    
+    # Get practice history
     practice_records = PracticeRecord.query.filter_by(
         student_id=current_user.id
     ).order_by(PracticeRecord.week_start.desc()).all()
     
     return render_template('student_dashboard.html', 
                          today=today,
+                         current_week_record=current_week_record,
                          practice_records=practice_records)
 
 @app.route('/director/dashboard')

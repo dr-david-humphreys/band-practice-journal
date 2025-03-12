@@ -37,56 +37,98 @@
                 </p>
             </div>
             <div class="card-body">
-                <form id="practiceForm">
-                    <div class="table-responsive">
+                <div class="table-responsive">
                         <table class="table">
                             <thead>
                                 <tr>
                                     <th>Day</th>
                                     <th>Minutes Practiced</th>
                                     <th>Daily Comments</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] %}
-                                <tr>
+                                {% set days = ['Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'] %}
+                                {% set today_idx = (today.weekday() - 4) % 7 %}  {# Friday is day 0 #}
+                                {% for day in days %}
+                                {% set day_idx = loop.index0 %}
+                                {% set is_today = day_idx == today_idx %}
+                                {% set is_past = day_idx < today_idx %}
+                                {% set is_future = day_idx > today_idx %}
+                                {% set is_thursday = day == 'Thursday' %}
+                                <tr class="{% if is_today %}table-active{% elif is_past %}table-secondary{% endif %}">
                                     <td>{{ day }}</td>
                                     <td>
                                         <input type="number" class="form-control practice-input" 
-                                               data-day="{{ day.lower() }}" min="0" value="0" required>
+                                               data-day="{{ day.lower() }}" min="0" value="{{ current_week_record.minutes|from_json|default({})|get_day_minutes(day.lower(), 0) if current_week_record else 0 }}" 
+                                               {% if is_future or current_week_record.is_submitted %}disabled{% endif %}>
                                     </td>
                                     <td>
                                         <input type="text" class="form-control comment-input"
-                                               data-day="{{ day.lower() }}" placeholder="What did you practice?">
+                                               data-day="{{ day.lower() }}" 
+                                               value="{{ current_week_record.daily_comments|from_json|default({})|get_day_comment(day.lower(), '') if current_week_record else '' }}"
+                                               placeholder="What did you practice?"
+                                               {% if is_future or current_week_record.is_submitted %}disabled{% endif %}>
+                                    </td>
+                                    <td>
+                                        {% if is_today and not current_week_record.is_submitted %}
+                                        <button type="button" class="btn btn-primary btn-sm save-daily" data-day="{{ day.lower() }}">Save Today</button>
+                                        {% elif is_past and not current_week_record.is_submitted %}
+                                        <button type="button" class="btn btn-outline-secondary btn-sm edit-day" data-day="{{ day.lower() }}">Edit</button>
+                                        {% endif %}
+                                        {% if is_thursday and not current_week_record.is_submitted %}
+                                        <button type="button" class="btn btn-success btn-sm ms-2" id="submitWeek">
+                                            <i class="fas fa-check-circle"></i> Submit Week
+                                        </button>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}
                                 <tr class="table-info">
                                     <td><strong>Total Minutes</strong></td>
-                                    <td colspan="2"><span id="totalMinutes">0</span></td>
+                                    <td colspan="3"><span id="totalMinutes">{{ current_week_record.minutes|sum_minutes if current_week_record else 0 }}</span></td>
                                 </tr>
                                 <tr class="table-info">
                                     <td><strong>Days Practiced</strong></td>
-                                    <td colspan="2"><span id="daysPracticed">0</span></td>
+                                    <td colspan="3"><span id="daysPracticed">{{ current_week_record.minutes|count_practice_days if current_week_record else 0 }}</span></td>
                                 </tr>
                                 <tr class="table-success">
                                     <td><strong>Estimated Grade</strong></td>
-                                    <td colspan="2"><span id="estimatedGrade">-</span></td>
+                                    <td colspan="3"><span id="estimatedGrade">{{ current_week_record|calculate_grade if current_week_record else '-' }}</span></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <div class="form-group mt-3">
-                        <label for="weeklyComments">Weekly Comments</label>
-                        <textarea class="form-control" id="weeklyComments" rows="3" 
-                                  placeholder="Any additional notes about your practice this week?"></textarea>
-                    </div>
+                    {% if current_week_record and not current_week_record.is_submitted %}
+                    <div class="alert alert-info mt-3">
+                        <h5>Ready to Submit Your Weekly Practice?</h5>
+                        <p>It's Thursday! You can now submit your practice record for the week. Once submitted, you won't be able to make changes.</p>
+                        
+                        <div class="form-group">
+                            <label for="weeklyComments">Weekly Comments</label>
+                            <textarea class="form-control" id="weeklyComments" rows="3" 
+                                      placeholder="Any additional notes about your practice this week?">{{ current_week_record.comments if current_week_record else '' }}</textarea>
+                        </div>
 
-                    <div class="text-center mt-3">
-                        <button type="submit" class="btn btn-primary">Save Practice Log</button>
+                        <div class="text-center mt-3">
+                            <button type="button" class="btn btn-success btn-lg" data-bs-toggle="modal" data-bs-target="#weeklyCommentsModal">
+                                <i class="fas fa-check-circle"></i> Submit Weekly Practice
+                            </button>
+                        </div>
                     </div>
-                </form>
+                    {% elif current_week_record and current_week_record.is_submitted %}
+                    <div class="alert alert-success mt-3">
+                        <h5>Week Submitted!</h5>
+                        <p>You submitted this week's practice on {{ current_week_record.submitted_at.strftime('%B %d, %Y at %I:%M %p') }}.</p>
+                        {% if current_week_record.comments %}
+                        <div class="mt-2">
+                            <strong>Your Comments:</strong>
+                            <p class="mb-0">{{ current_week_record.comments }}</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
             </div>
         </div>
 
@@ -184,6 +226,32 @@
                     </div>
                     <button type="submit" class="btn btn-primary">Save</button>
                 </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Weekly Comments Modal -->
+<div class="modal fade" id="weeklyCommentsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Submit Weekly Practice</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Add any final comments about your practice this week before submitting:</p>
+                <div class="form-group">
+                    <label for="weeklyComments">Weekly Comments</label>
+                    <textarea class="form-control" id="weeklyComments" rows="3" 
+                            placeholder="Any additional notes about your practice this week?">{{ current_week_record.comments if current_week_record else '' }}</textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmSubmit">
+                    <i class="fas fa-check-circle"></i> Submit Practice Log
+                </button>
             </div>
         </div>
     </div>

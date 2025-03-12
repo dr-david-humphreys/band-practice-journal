@@ -129,78 +129,133 @@ document.addEventListener('DOMContentLoaded', function() {
             .catch(error => console.error('Error loading records:', error));
     }
 
-    // Student Dashboard: Handle practice inputs
-    if (practiceInputs.length > 0) {
-        practiceInputs.forEach(input => {
-            input.addEventListener('input', updateTotals);
-        });
-
-        function updateTotals() {
-            const minutes = {};
-            practiceInputs.forEach(input => {
-                minutes[input.dataset.day] = input.value || '0';
-            });
+    // Student Dashboard: Handle daily practice saving
+    document.querySelectorAll('.save-daily, .edit-day').forEach(button => {
+        button.addEventListener('click', async function() {
+            const day = this.dataset.day;
+            const minutesInput = document.querySelector(`.practice-input[data-day="${day}"]`);
+            const commentInput = document.querySelector(`.comment-input[data-day="${day}"]`);
             
-            const { grade, totalMinutes, practiceDays, maxPossiblePoints } = calculateGrade(minutes);
+            // If this is an edit button, enable the inputs and change button
+            if (this.classList.contains('edit-day')) {
+                minutesInput.disabled = false;
+                commentInput.disabled = false;
+                this.classList.remove('btn-outline-secondary', 'edit-day');
+                this.classList.add('btn-primary', 'save-daily');
+                this.textContent = 'Save';
+                return;
+            }
             
-            document.getElementById('totalMinutes').textContent = totalMinutes;
-            document.getElementById('daysPracticed').textContent = practiceDays;
-            document.getElementById('estimatedGrade').textContent = 
-                `${grade}/85 (${maxPossiblePoints}/105 with parent signature)`;
-        }
-
-        // Initialize totals
-        updateTotals();
-    }
-
-    // Student Dashboard: Handle practice form submission
-    if (practiceForm) {
-        practiceForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
-            const minutes = {};
-            const comments = {};
-            
-            practiceInputs.forEach(input => {
-                minutes[input.dataset.day] = input.value || '0';
-            });
-            
-            document.querySelectorAll('.comment-input').forEach(input => {
-                comments[input.dataset.day] = input.value || '';
-            });
-            
-            const weeklyComments = document.getElementById('weeklyComments').value;
+            const data = {
+                day: day,
+                minutes: parseInt(minutesInput.value) || 0,
+                comment: commentInput.value || ''
+            };
             
             try {
-                const response = await fetch('/api/practice', {
+                const response = await fetch('/api/practice/daily', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({
-                        minutes: minutes,
-                        comments: comments,
-                        weeklyComments: weeklyComments
-                    })
+                    body: JSON.stringify(data)
                 });
                 
                 if (response.ok) {
-                    const data = await response.json();
-                    if (!data.parent_email) {
-                        // Show parent email modal if not set
+                    const responseData = await response.json();
+                    
+                    // Show success message
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                    alertDiv.innerHTML = `
+                        Practice saved for ${day}!
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    document.querySelector('.card-body').insertBefore(
+                        alertDiv,
+                        document.querySelector('.table-responsive')
+                    );
+                    
+                    // Update streak if available
+                    if (responseData.streak && document.getElementById('streakCount')) {
+                        document.getElementById('streakCount').textContent = responseData.streak;
+                    }
+                    
+                    // Disable inputs after saving
+                    minutesInput.disabled = true;
+                    commentInput.disabled = true;
+                    
+                    // Convert save button back to edit button for past days
+                    if (this.textContent === 'Save') {
+                        this.classList.remove('btn-primary', 'save-daily');
+                        this.classList.add('btn-outline-secondary', 'edit-day');
+                        this.textContent = 'Edit';
+                    } else {
+                        this.disabled = true;
+                        this.textContent = 'Saved!';
+                    }
+                    
+                    // Update totals
+                    updateTotals();
+                    
+                    // Show parent email modal if not set
+                    if (!responseData.parent_email) {
                         const modal = new bootstrap.Modal(document.getElementById('parentEmailModal'));
                         modal.show();
-                    } else {
-                        window.location.reload();
                     }
                 } else {
-                    throw new Error('Failed to save practice record');
+                    throw new Error('Failed to save practice');
                 }
             } catch (error) {
                 console.error('Error:', error);
-                alert('Error saving practice record. Please try again.');
+                alert('Error saving practice. Please try again.');
             }
         });
+    });
+
+    // Student Dashboard: Handle weekly practice submission
+    document.getElementById('submitWeek')?.addEventListener('click', function() {
+        const modal = new bootstrap.Modal(document.getElementById('weeklyCommentsModal'));
+        modal.show();
+    });
+
+    document.getElementById('confirmSubmit')?.addEventListener('click', async function() {
+        const comments = document.getElementById('weeklyComments').value;
+        
+        try {
+            const response = await fetch('/api/practice/submit', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ comments: comments })
+            });
+            
+            if (response.ok) {
+                // Reload page to show updated status
+                window.location.reload();
+            } else {
+                throw new Error('Failed to submit practice');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error submitting practice. Please try again.');
+        }
+    });
+
+    // Helper function to update totals
+    function updateTotals() {
+        const minutes = {};
+        document.querySelectorAll('.practice-input').forEach(input => {
+            minutes[input.dataset.day] = input.value || '0';
+        });
+        
+        const { grade, totalMinutes, practiceDays, maxPossiblePoints } = calculateGrade(minutes);
+        
+        document.getElementById('totalMinutes').textContent = totalMinutes;
+        document.getElementById('daysPracticed').textContent = practiceDays;
+        document.getElementById('estimatedGrade').textContent = 
+            `${grade}/85 (${maxPossiblePoints}/105 with parent signature)`;
     }
 
     // Handle parent email form submission
