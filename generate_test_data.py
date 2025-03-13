@@ -57,14 +57,25 @@ def generate_test_data():
         (0, 19, 1)      # Minimal practice (5%)
     ]
     
-    # Calculate week dates
-    today = datetime.now().date()
-    days_since_friday = (today.weekday() - 4) % 7
-    week_start = today - timedelta(days=days_since_friday)
-    
     # Create test students
     students = []
     used_names = set()  # Track used name combinations
+    
+    # Create Emily Davis as the first student
+    emily = User(
+        username="edavis",
+        email="edavis@school.edu",
+        password_hash=generate_password_hash("student123"),
+        role="student",
+        instrument="Flute",
+        parent_email="parent.edavis@email.com",
+        first_name="Emily",
+        last_name="Davis"
+    )
+    db.session.add(emily)
+    db.session.flush()  # Get student ID
+    students.append(emily)
+    used_names.add(("Emily", "Davis"))
     
     while len(students) < 40:
         # Generate random name
@@ -104,50 +115,65 @@ def generate_test_data():
         db.session.add(student)
         db.session.flush()  # Get student ID
         students.append(student)
+    
+    # Generate practice data from January 2025 to current date
+    start_date = date(2025, 1, 3)  # First Friday of January 2025
+    today = datetime.now().date()
+    
+    current_date = start_date
+    while current_date <= today:
+        # Skip if not a Friday (week start)
+        if current_date.weekday() != 4:  # 4 is Friday
+            current_date += timedelta(days=1)
+            continue
+            
+        # Generate practice data for each student for this week
+        for student in students:
+            # Generate practice data
+            practice_range = random.choices(practice_ranges, 
+                                          weights=[r[2] for r in practice_ranges])[0]
+            days_practiced = random.randint(3, 7)  # Between 3 and 7 days
+            practice_days = random.sample(['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'], days_practiced)
+            
+            # Create minutes dictionary with some variation
+            minutes = {}
+            for day in ['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']:
+                if day in practice_days:
+                    # Add some random variation to practice times
+                    base_minutes = random.randint(practice_range[0], practice_range[1])
+                    variation = random.randint(-10, 10)
+                    minutes[day] = max(0, base_minutes + variation)
+                else:
+                    minutes[day] = 0
+            
+            # Create comments dictionary with more varied comments
+            comments = {}
+            practice_activities = [
+                'scales', 'etudes', 'band music', 'sight reading', 'solos',
+                'duets', 'ensemble pieces', 'technical exercises', 'tone exercises',
+                'rhythm practice'
+            ]
+            for day, mins in minutes.items():
+                if mins > 0:
+                    activities = random.sample(practice_activities, random.randint(1, 3))
+                    comments[day] = f"Practiced {', '.join(activities)} for {mins} minutes"
+            
+            # Create practice record with varied submission status
+            record = PracticeRecord(
+                student_id=student.id,
+                week_start=current_date,
+                minutes=json.dumps(minutes),
+                daily_comments=json.dumps(comments),
+                comments=f"Weekly practice report for {student.first_name} {student.last_name}",
+                is_submitted=True,
+                submitted_at=current_date + timedelta(days=6),  # Submit on Thursday
+                parent_signature_status='approved' if random.random() < 0.8 else 'pending',  # 80% approved
+                signature_requested=True,
+                signature_timestamp=current_date + timedelta(days=6) if random.random() < 0.8 else None
+            )
+            db.session.add(record)
         
-        # Generate practice data
-        practice_range = random.choices(practice_ranges, 
-                                      weights=[r[2] for r in practice_ranges])[0]
-        days_practiced = random.randint(3, 7)  # Between 3 and 7 days
-        practice_days = random.sample(['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'], days_practiced)
-        
-        # Create minutes dictionary with some variation
-        minutes = {}
-        for day in ['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday']:
-            if day in practice_days:
-                # Add some random variation to practice times
-                base_minutes = random.randint(practice_range[0], practice_range[1])
-                variation = random.randint(-10, 10)
-                minutes[day] = max(0, base_minutes + variation)
-            else:
-                minutes[day] = 0
-        
-        # Create comments dictionary with more varied comments
-        comments = {}
-        practice_activities = [
-            'scales', 'etudes', 'band music', 'sight reading', 'solos',
-            'duets', 'ensemble pieces', 'technical exercises', 'tone exercises',
-            'rhythm practice'
-        ]
-        for day, mins in minutes.items():
-            if mins > 0:
-                activities = random.sample(practice_activities, random.randint(1, 3))
-                comments[day] = f"Practiced {', '.join(activities)} for {mins} minutes"
-        
-        # Create practice record with varied submission status
-        record = PracticeRecord(
-            student_id=student.id,
-            week_start=week_start,
-            minutes=json.dumps(minutes),
-            daily_comments=json.dumps(comments),
-            comments=f"Weekly practice report for {first_name} {last_name}",
-            is_submitted=True,
-            submitted_at=datetime.now(),
-            parent_signature_status='approved' if len(students) < 35 else 'pending',
-            signature_requested=True,
-            signature_timestamp=datetime.now() if len(students) < 35 else None
-        )
-        db.session.add(record)
+        current_date += timedelta(days=1)
     
     # Commit all changes
     db.session.commit()

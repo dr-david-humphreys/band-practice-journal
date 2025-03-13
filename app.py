@@ -427,6 +427,26 @@ def get_week_records(week_start):
         'total_points': calculate_points(record)
     } for record in records])
 
+@app.route('/api/student/<username>/history')
+@login_required
+def get_student_history(username):
+    if current_user.role != 'director':
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    student = User.query.filter_by(username=username).first_or_404()
+    records = PracticeRecord.query.filter_by(
+        student_id=student.id
+    ).order_by(PracticeRecord.week_start.desc()).all()
+
+    return jsonify([{
+        'week_start': record.week_start.isoformat(),
+        'minutes': record.minutes,
+        'comments': record.comments,
+        'daily_comments': record.daily_comments,
+        'parent_signature_status': record.parent_signature_status,
+        'total_points': calculate_points(record)
+    } for record in records])
+
 @app.route('/student/dashboard')
 @login_required
 def student_dashboard():
