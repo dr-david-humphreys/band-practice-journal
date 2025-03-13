@@ -35,6 +35,8 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
     role = db.Column(db.String(20), nullable=False)  # 'student', 'director'
+    first_name = db.Column(db.String(50), nullable=True)
+    last_name = db.Column(db.String(50), nullable=True)
     instrument = db.Column(db.String(50), nullable=True)
     parent_email = db.Column(db.String(120), nullable=True)
     streak_count = db.Column(db.Integer, default=0)
@@ -411,10 +413,12 @@ def get_week_records(week_start):
     week_date = datetime.strptime(week_start, '%Y-%m-%d').date()
     records = PracticeRecord.query.join(User).filter(
         PracticeRecord.week_start == week_date
-    ).all()
+    ).order_by(User.last_name, User.first_name).all()
 
     return jsonify([{
-        'student_name': record.student.username,
+        'first_name': record.student.first_name,
+        'last_name': record.student.last_name,
+        'username': record.student.username,
         'instrument': record.student.instrument,
         'minutes': record.minutes,
         'comments': record.comments,
@@ -459,11 +463,15 @@ def director_dashboard():
     # Define instruments in score order
     instruments = [
         'Flute', 'Oboe', 'Clarinet', 'Bassoon', 'Saxophone',
-        'Trumpet', 'Horn', 'Trombone', 'Euphonium', 'Tuba'
+        'Trumpet', 'Horn', 'Trombone', 'Euphonium', 'Tuba',
+        'Percussion'
     ]
     
-    # Get all practice records
-    records = PracticeRecord.query.all()
+    # Get all practice records ordered by student last name, first name
+    records = PracticeRecord.query.join(User).order_by(
+        User.last_name, User.first_name
+    ).all()
+    
     return render_template('director_dashboard.html', records=records, instruments=instruments)
 
 @app.route('/request_signature/<int:record_id>')

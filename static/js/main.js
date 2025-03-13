@@ -73,25 +73,31 @@ document.addEventListener('DOMContentLoaded', function() {
                     const minutesObj = JSON.parse(record.minutes);
                     const { totalMinutes, practiceDays } = calculateGrade(minutesObj);
                     const signatureStatus = record.parent_signature_status === 'approved' ? 
-                        '<span class="badge bg-success">Yes</span>' :
+                        '<span class="badge bg-success">Yes (+20 pts)</span>' :
                         record.parent_signature_status === 'denied' ?
                         '<span class="badge bg-danger">Denied</span>' :
                         record.parent_signature_status === 'pending' ?
-                        '<span class="badge bg-warning">Pending</span>' :
+                        '<span class="badge bg-warning text-dark">Pending</span>' :
                         '<span class="badge bg-secondary">No</span>';
                     
                     return `
                         <tr>
-                            <td>${record.student_name}</td>
+                            <td>${record.last_name}</td>
+                            <td>${record.first_name}</td>
                             <td>${record.instrument}</td>
                             <td>${totalMinutes}</td>
-                            <td>${practiceDays}</td>
+                            <td>
+                                ${practiceDays}
+                                ${practiceDays >= 5 ? '<span class="badge bg-success">+5 pts</span>' : ''}
+                            </td>
                             <td>${signatureStatus}</td>
                             <td>${record.total_points}/105</td>
                             <td>
-                                <button class="btn btn-sm btn-info view-details" 
+                                <button class="btn btn-sm btn-primary view-details" 
                                         data-minutes='${record.minutes}'
-                                        data-comments='${record.comments || ""}'
+                                        data-comments='${record.daily_comments || "{}"}'
+                                        data-first-name="${record.first_name}"
+                                        data-last-name="${record.last_name}"
                                         data-bs-toggle="modal"
                                         data-bs-target="#detailsModal">
                                     View Details
@@ -100,31 +106,6 @@ document.addEventListener('DOMContentLoaded', function() {
                         </tr>
                     `;
                 }).join('');
-
-                // Add event listeners to detail buttons
-                document.querySelectorAll('.view-details').forEach(button => {
-                    button.addEventListener('click', function() {
-                        const minutes = JSON.parse(this.dataset.minutes);
-                        const comments = this.dataset.comments;
-                        
-                        document.getElementById('detailsBody').innerHTML = Object.entries(minutes)
-                            .map(([day, mins]) => `
-                                <tr>
-                                    <td>${day}</td>
-                                    <td>${mins}</td>
-                                </tr>
-                            `).join('') + (
-                                comments ? `
-                                    <tr>
-                                        <td colspan="2">
-                                            <strong>Comments:</strong><br>
-                                            ${comments}
-                                        </td>
-                                    </tr>
-                                ` : ''
-                            );
-                    });
-                });
             })
             .catch(error => console.error('Error loading records:', error));
     }
@@ -321,39 +302,46 @@ document.addEventListener('DOMContentLoaded', function() {
                 let aValue, bValue;
                 
                 // Get values based on column
-                if (column === 'student') {
-                    // Extract name without numbers for primary sort
-                    const aMatch = a.cells[0].textContent.trim().match(/([a-zA-Z]+)(\d+)?/);
-                    const bMatch = b.cells[0].textContent.trim().match(/([a-zA-Z]+)(\d+)?/);
-                    
-                    if (aMatch && bMatch) {
-                        const [, aName, aNum] = aMatch;
-                        const [, bName, bNum] = bMatch;
-                        
-                        // First compare names
-                        if (aName !== bName) {
-                            return aName.localeCompare(bName) * (currentSort.direction === 'asc' ? 1 : -1);
-                        }
-                        // If names are same, compare numbers
-                        return ((parseInt(aNum) || 0) - (parseInt(bNum) || 0)) * (currentSort.direction === 'asc' ? 1 : -1);
-                    }
-                    return a.cells[0].textContent.localeCompare(b.cells[0].textContent) * (currentSort.direction === 'asc' ? 1 : -1);
+                if (column === 'lastName') {
+                    aValue = a.cells[0].textContent.trim();
+                    bValue = b.cells[0].textContent.trim();
+                } else if (column === 'firstName') {
+                    aValue = a.cells[1].textContent.trim();
+                    bValue = b.cells[1].textContent.trim();
                 } else if (column === 'instrument') {
-                    aValue = parseInt(a.cells[1].dataset.scoreOrder) || 999;
-                    bValue = parseInt(b.cells[1].dataset.scoreOrder) || 999;
+                    // Define instrument order
+                    const instrumentOrder = {
+                        'Flute': 1, 'Oboe': 2, 'Clarinet': 3, 'Bassoon': 4, 'Saxophone': 5,
+                        'Trumpet': 6, 'Horn': 7, 'Trombone': 8, 'Euphonium': 9, 'Tuba': 10,
+                        'Percussion': 11
+                    };
+                    
+                    // Get instrument names and their order values
+                    aValue = instrumentOrder[a.cells[2].textContent.trim()] || 999;
+                    bValue = instrumentOrder[b.cells[2].textContent.trim()] || 999;
                 } else if (column === 'minutes') {
-                    aValue = parseInt(a.cells[2].textContent) || 0;
-                    bValue = parseInt(b.cells[2].textContent) || 0;
-                } else if (column === 'days') {
                     aValue = parseInt(a.cells[3].textContent) || 0;
                     bValue = parseInt(b.cells[3].textContent) || 0;
+                } else if (column === 'days') {
+                    // Extract just the number from the days cell (before any badges)
+                    aValue = parseInt(a.cells[4].textContent.trim().split(' ')[0]) || 0;
+                    bValue = parseInt(b.cells[4].textContent.trim().split(' ')[0]) || 0;
                 } else if (column === 'signature') {
-                    aValue = a.cells[4].querySelector('.badge').textContent.includes('Yes') ? 1 : 0;
-                    bValue = b.cells[4].querySelector('.badge').textContent.includes('Yes') ? 1 : 0;
+                    // Sort by signature status (approved > pending > denied > no)
+                    const getSignatureValue = (cell) => {
+                        const badge = cell.querySelector('.badge');
+                        if (!badge) return 0;
+                        if (badge.textContent.includes('Yes')) return 3;
+                        if (badge.textContent.includes('Pending')) return 2;
+                        if (badge.textContent.includes('Denied')) return 1;
+                        return 0;
+                    };
+                    aValue = getSignatureValue(a.cells[5]);
+                    bValue = getSignatureValue(b.cells[5]);
                 } else if (column === 'grade') {
-                    // Extract just the number from "X/105 pts" format
-                    aValue = parseInt(a.cells[5].textContent.split('/')[0]) || 0;
-                    bValue = parseInt(b.cells[5].textContent.split('/')[0]) || 0;
+                    // Extract just the number from "X/105" format
+                    aValue = parseInt(a.cells[6].textContent.split('/')[0]) || 0;
+                    bValue = parseInt(b.cells[6].textContent.split('/')[0]) || 0;
                 }
                 
                 // Handle numeric sorting
