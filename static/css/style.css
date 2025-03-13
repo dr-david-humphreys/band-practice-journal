@@ -334,3 +334,20 @@ body {
     border: 1px solid #ced4da;
     border-radius: 0.25rem;
 }
+
+.modal-xl {
+    max-width: 90%;
+}
+
+/* Chart styles */
+#practiceChart {
+    height: 400px !important;
+    width: 100% !important;
+}
+
+.chart-container {
+    position: relative;
+    height: 400px;
+    width: 100%;
+    margin: 20px 0;
+}

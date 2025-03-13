@@ -111,33 +111,33 @@
     </div>
 </div>
 
-<!-- Modal for practice history -->
-<div class="modal fade" id="historyModal" tabindex="-1">
+<!-- History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1" aria-labelledby="historyModalLabel" role="dialog">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Practice History</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="historyModalLabel">Practice History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
+                <div class="chart-container">
+                    <canvas id="practiceChart"></canvas>
+                </div>
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Week</th>
+                                <th>Week Starting</th>
                                 <th>Total Minutes</th>
                                 <th>Days Practiced</th>
                                 <th>Parent Signature</th>
-                                <th>Grade</th>
-                                <th>Details</th>
+                                <th>Points</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="historyBody">
                         </tbody>
                     </table>
-                </div>
-                <div class="mt-4">
-                    <canvas id="practiceChart"></canvas>
                 </div>
             </div>
         </div>
@@ -189,6 +189,130 @@ document.addEventListener('DOMContentLoaded', function() {
             </tr>`;
     }
 
+    // Function to attach event listeners
+    function attachEventListeners() {
+        // Attach view details listeners
+        document.querySelectorAll('.view-details').forEach(button => {
+            button.addEventListener('click', function() {
+                const minutes = JSON.parse(this.dataset.minutes || '{}');
+                const comments = JSON.parse(this.dataset.comments || '{}');
+                const firstName = this.dataset.firstName;
+                const lastName = this.dataset.lastName;
+                const days = ['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+                
+                document.querySelector('.modal-title').textContent = `${firstName} ${lastName}'s Practice Details`;
+                
+                const tbody = document.getElementById('detailsBody');
+                tbody.innerHTML = '';
+                
+                days.forEach(day => {
+                    const row = document.createElement('tr');
+                    const dayMinutes = minutes[day] || 0;
+                    row.innerHTML = `
+                        <td>${day.charAt(0).toUpperCase() + day.slice(1)}</td>
+                        <td>${dayMinutes} minutes</td>
+                        <td>${comments[day] || '-'}</td>
+                    `;
+                    if (dayMinutes > 0) {
+                        row.classList.add('table-success');
+                    }
+                    tbody.appendChild(row);
+                });
+            });
+        });
+        
+        // Attach view history listeners
+        document.querySelectorAll('.view-history').forEach(button => {
+            button.addEventListener('click', function() {
+                const username = this.dataset.username;
+                const firstName = this.dataset.firstName;
+                const lastName = this.dataset.lastName;
+                
+                document.querySelector('#historyModal .modal-title').textContent = `${firstName} ${lastName}'s Practice History`;
+                
+                // Fetch student history
+                fetch(`/api/student/${username}/history`)
+                    .then(response => response.json())
+                    .then(records => {
+                        const tbody = document.getElementById('historyBody');
+                        tbody.innerHTML = '';
+                        
+                        // Prepare data for chart
+                        const chartData = records.map(record => ({
+                            date: new Date(record.week_start).toLocaleDateString(),
+                            minutes: Object.values(JSON.parse(record.minutes)).reduce((a, b) => a + b, 0)
+                        })).reverse(); // Show oldest to newest
+                        
+                        // Create chart
+                        const ctx = document.getElementById('practiceChart').getContext('2d');
+                        if (window.practiceChart) {
+                            window.practiceChart.destroy();
+                        }
+                        window.practiceChart = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                labels: chartData.map(d => d.date),
+                                datasets: [{
+                                    label: 'Total Practice Minutes',
+                                    data: chartData.map(d => d.minutes),
+                                    borderColor: 'rgb(75, 192, 192)',
+                                    tension: 0.1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                scales: {
+                                    y: {
+                                        beginAtZero: true,
+                                        title: {
+                                            display: true,
+                                            text: 'Minutes'
+                                        }
+                                    },
+                                    x: {
+                                        title: {
+                                            display: true,
+                                            text: 'Week Starting'
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        
+                        // Update table
+                        records.forEach(record => {
+                            const minutes = JSON.parse(record.minutes);
+                            const totalMinutes = Object.values(minutes).reduce((a, b) => a + b, 0);
+                            const daysPracticed = Object.values(minutes).filter(m => m > 0).length;
+                            const signatureStatus = record.parent_signature_status === 'approved' 
+                                ? '<span class="badge bg-success">Yes (+20 pts)</span>'
+                                : '<span class="badge bg-warning text-dark">Pending</span>';
+                            
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${new Date(record.week_start).toLocaleDateString()}</td>
+                                <td>${totalMinutes}</td>
+                                <td>${daysPracticed}${daysPracticed >= 5 ? ' <span class="badge bg-success">+5 pts</span>' : ''}</td>
+                                <td>${signatureStatus}</td>
+                                <td>${record.total_points}/105</td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-primary view-week-details"
+                                            data-minutes='${record.minutes}'
+                                            data-comments='${record.daily_comments}'
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#detailsModal">
+                                        View Details
+                                    </button>
+                                </td>
+                            `;
+                            tbody.appendChild(row);
+                        });
+                    })
+                    .catch(error => console.error('Error loading history:', error));
+            });
+        });
+    }
+
     // Week filter handling
     const weekFilter = document.getElementById('weekFilter');
     
@@ -222,139 +346,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 attachEventListeners();
             });
     }
-    
-    function attachEventListeners() {
-        // Attach view details listeners
-        document.querySelectorAll('.view-details').forEach(button => {
-            button.addEventListener('click', handleViewDetails);
-        });
-        
-        // Attach view history listeners
-        document.querySelectorAll('.view-history').forEach(button => {
-            button.addEventListener('click', handleViewHistory);
-        });
-    }
 
-    // Handle details view
-    document.querySelectorAll('.view-details').forEach(button => {
-        button.addEventListener('click', function() {
-            const minutes = JSON.parse(this.dataset.minutes || '{}');
-            const comments = JSON.parse(this.dataset.comments || '{}');
-            const firstName = this.dataset.firstName;
-            const lastName = this.dataset.lastName;
-            const days = ['friday', 'saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
-            
-            document.querySelector('.modal-title').textContent = `${firstName} ${lastName}'s Practice Details`;
-            
-            const tbody = document.getElementById('detailsBody');
-            tbody.innerHTML = '';
-            
-            days.forEach(day => {
-                const row = document.createElement('tr');
-                const dayMinutes = minutes[day] || 0;
-                row.innerHTML = `
-                    <td>${day.charAt(0).toUpperCase() + day.slice(1)}</td>
-                    <td>${dayMinutes} minutes</td>
-                    <td>${comments[day] || '-'}</td>
-                `;
-                if (dayMinutes > 0) {
-                    row.classList.add('table-success');
-                }
-                tbody.appendChild(row);
-            });
-        });
-    });
-
-    // Handle history view
-    document.querySelectorAll('.view-history').forEach(button => {
-        button.addEventListener('click', function() {
-            const username = this.dataset.username;
-            const firstName = this.dataset.firstName;
-            const lastName = this.dataset.lastName;
-            
-            document.querySelector('#historyModal .modal-title').textContent = `${firstName} ${lastName}'s Practice History`;
-            
-            // Fetch student history
-            fetch(`/api/student/${username}/history`)
-                .then(response => response.json())
-                .then(records => {
-                    const tbody = document.getElementById('historyBody');
-                    tbody.innerHTML = '';
-                    
-                    // Prepare data for chart
-                    const chartData = records.map(record => ({
-                        date: new Date(record.week_start).toLocaleDateString(),
-                        minutes: Object.values(JSON.parse(record.minutes)).reduce((a, b) => a + b, 0)
-                    })).reverse(); // Show oldest to newest
-                    
-                    // Create chart
-                    const ctx = document.getElementById('practiceChart').getContext('2d');
-                    if (window.practiceChart) {
-                        window.practiceChart.destroy();
-                    }
-                    window.practiceChart = new Chart(ctx, {
-                        type: 'line',
-                        data: {
-                            labels: chartData.map(d => d.date),
-                            datasets: [{
-                                label: 'Total Practice Minutes',
-                                data: chartData.map(d => d.minutes),
-                                borderColor: 'rgb(75, 192, 192)',
-                                tension: 0.1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    title: {
-                                        display: true,
-                                        text: 'Minutes'
-                                    }
-                                },
-                                x: {
-                                    title: {
-                                        display: true,
-                                        text: 'Week Starting'
-                                    }
-                                }
-                            }
-                        }
-                    });
-                    
-                    // Update table
-                    records.forEach(record => {
-                        const minutes = JSON.parse(record.minutes);
-                        const totalMinutes = Object.values(minutes).reduce((a, b) => a + b, 0);
-                        const daysPracticed = Object.values(minutes).filter(m => m > 0).length;
-                        const signatureStatus = record.parent_signature_status === 'approved' 
-                            ? '<span class="badge bg-success">Yes (+20 pts)</span>'
-                            : '<span class="badge bg-warning text-dark">Pending</span>';
-                        
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${new Date(record.week_start).toLocaleDateString()}</td>
-                            <td>${totalMinutes}</td>
-                            <td>${daysPracticed}${daysPracticed >= 5 ? ' <span class="badge bg-success">+5 pts</span>' : ''}</td>
-                            <td>${signatureStatus}</td>
-                            <td>${record.total_points}/105</td>
-                            <td>
-                                <button type="button" class="btn btn-sm btn-primary view-week-details"
-                                        data-minutes='${record.minutes}'
-                                        data-comments='${record.daily_comments}'
-                                        data-bs-toggle="modal"
-                                        data-bs-target="#detailsModal">
-                                    View Details
-                                </button>
-                            </td>
-                        `;
-                        tbody.appendChild(row);
-                    });
-                })
-                .catch(error => console.error('Error loading history:', error));
-        });
-    });
+    // Attach initial event listeners
+    attachEventListeners();
 });
 </script>
 

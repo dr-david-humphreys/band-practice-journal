@@ -102,6 +102,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                         data-bs-target="#detailsModal">
                                     View Details
                                 </button>
+                                <button class="btn btn-sm btn-info view-history"
+                                        data-username="${record.username}"
+                                        data-first-name="${record.first_name}"
+                                        data-last-name="${record.last_name}"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#historyModal">
+                                    View History
+                                </button>
                             </td>
                         </tr>
                     `;
@@ -384,6 +392,152 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
                 tbody.appendChild(row);
             });
+        });
+    });
+
+    // Handle view history button click
+    document.querySelectorAll('.view-history').forEach(button => {
+        button.addEventListener('click', function() {
+            const username = this.dataset.username;
+            const firstName = this.dataset.firstName;
+            const lastName = this.dataset.lastName;
+            
+            console.log('Fetching history for:', username);
+            
+            const modal = document.getElementById('historyModal');
+            const modalTitle = modal.querySelector('.modal-title');
+            modalTitle.textContent = `${firstName} ${lastName}'s Practice History`;
+            
+            // Fetch student history
+            fetch(`/api/student/${username}/history`)
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(records => {
+                    console.log('Received records:', records);
+                    const tbody = document.getElementById('historyBody');
+                    tbody.innerHTML = '';
+                    
+                    if (!records || records.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="6" class="text-center">No practice history available</td></tr>';
+                        return;
+                    }
+                    
+                    // Prepare data for chart
+                    const chartData = records.map(record => ({
+                        date: new Date(record.week_start).toLocaleDateString(),
+                        minutes: Object.values(JSON.parse(record.minutes)).reduce((a, b) => a + b, 0)
+                    })).reverse(); // Show oldest to newest
+                    
+                    console.log('Chart data:', chartData);
+                    
+                    // Create chart
+                    const ctx = document.getElementById('practiceChart').getContext('2d');
+                    if (window.practiceChart) {
+                        window.practiceChart.destroy();
+                    }
+                    
+                    window.practiceChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: chartData.map(d => d.date),
+                            datasets: [{
+                                label: 'Minutes Practiced',
+                                data: chartData.map(d => d.minutes),
+                                borderColor: '#5a1418',
+                                backgroundColor: 'rgba(90, 20, 24, 0.1)',
+                                tension: 0.1,
+                                fill: true,
+                                pointBackgroundColor: '#5a1418',
+                                pointBorderColor: '#fff',
+                                pointBorderWidth: 2,
+                                pointRadius: 4,
+                                pointHoverRadius: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            return `${context.parsed.y} minutes`;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    title: {
+                                        display: true,
+                                        text: 'Minutes Practiced',
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.1)'
+                                    }
+                                },
+                                x: {
+                                    title: {
+                                        display: true,
+                                        text: 'Week Starting',
+                                        font: {
+                                            size: 14,
+                                            weight: 'bold'
+                                        }
+                                    },
+                                    grid: {
+                                        display: false
+                                    }
+                                }
+                            }
+                        }
+                    });
+                    
+                    // Populate history table
+                    records.forEach(record => {
+                        const minutes = JSON.parse(record.minutes);
+                        const totalMinutes = Object.values(minutes).reduce((a, b) => a + b, 0);
+                        const daysPracticed = Object.values(minutes).filter(m => m > 0).length;
+                        const signatureStatus = record.parent_signature_status === 'approved' 
+                            ? '<span class="badge bg-success">Yes (+20 pts)</span>'
+                            : '<span class="badge bg-warning text-dark">Pending</span>';
+                        
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${new Date(record.week_start).toLocaleDateString()}</td>
+                            <td>${totalMinutes}</td>
+                            <td>${daysPracticed}${daysPracticed >= 5 ? ' <span class="badge bg-success">+5 pts</span>' : ''}</td>
+                            <td>${signatureStatus}</td>
+                            <td>${record.total_points}/105</td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-primary view-week-details"
+                                        data-minutes='${record.minutes}'
+                                        data-comments='${record.daily_comments}'
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#detailsModal">
+                                    View Details
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+
+                    // Show the modal and focus the close button
+                    const modalInstance = new bootstrap.Modal(modal);
+                    modalInstance.show();
+                    modal.querySelector('.btn-close').focus();
+                })
+                .catch(error => console.error('Error loading history:', error));
         });
     });
 });
